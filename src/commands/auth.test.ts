@@ -40,7 +40,7 @@ test('runLogout clears the cached session', () => {
 
 test('runWhoami returns the client response verbatim', async () => {
   const fakeClient: ApiClient = {
-    request: async () => ({ email: 'a@youware.com', isSuperAdmin: false, canSend: true }),
+    request: async () => ({ email: 'a@youware.com', isSuperAdmin: false, canSend: true } as any),
   };
   const me = await runWhoami(fakeClient);
   assert.deepEqual(me, { email: 'a@youware.com', isSuperAdmin: false, canSend: true });
