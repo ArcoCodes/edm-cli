@@ -1,0 +1,8 @@
+node_modules/
+*.log
+*.test.ts
+docs/
+DEV.md
+.DS_Store
+.claude/
+tsconfig.json
