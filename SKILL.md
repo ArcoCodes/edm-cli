@@ -4,6 +4,14 @@ Agent-friendly CLI for the EDM campaign tool at `https://optimal-dodo-5009.edges
 
 Every command supports `--json` (put it right after `edm-cli`, before the subcommand: `edm-cli --json campaign list`) for structured output. Without it, output is short human-readable lines.
 
+## Install
+
+If `edm-cli --help` doesn't already work, install it (public repo, no auth needed):
+
+```bash
+npm install -g git+https://github.com/ArcoCodes/edm-cli.git
+```
+
 ## Setup (one-time, human does this)
 
 ```
