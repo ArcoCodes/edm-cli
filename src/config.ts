@@ -4,6 +4,8 @@ import * as path from 'node:path';
 
 export interface Config {
   edgesparkApiKey?: string;
+  lastUpdateCheck?: number;
+  latestVersion?: string;
 }
 
 export function configFilePath(): string {
