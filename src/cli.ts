@@ -6,11 +6,14 @@ import { runLogin, runLogout, runWhoami } from './commands/auth.js';
 import { runCreate, runUpdate, runSetHtml, runSetText, runSetRecipients } from './commands/campaign-write.js';
 import { runList, runGet, runLogs, runPreviewRecipients } from './commands/campaign-read.js';
 import { runSend, runResendFailed, runDelete, AbortedError } from './commands/campaign-send.js';
+import { runDbSetup, runQuery } from './commands/db.js';
+import { DbError } from './db-client.js';
 import { promptText, promptHidden, confirm } from './prompt.js';
 
 export interface CliDeps {
   baseUrl: string;
   sessionFilePath?: string;
+  configFilePath?: string;
   fetchImpl?: typeof fetch;
   promptText: (message: string) => Promise<string>;
   promptHidden: (message: string) => Promise<string>;
@@ -37,6 +40,11 @@ function handleAction(fn: () => Promise<void>): void {
   fn().catch((err: unknown) => {
     if (err instanceof AbortedError) {
       console.error(err.message);
+      process.exitCode = 1;
+      return;
+    }
+    if (err instanceof DbError) {
+      console.error(`Error: ${err.message}`);
       process.exitCode = 1;
       return;
     }
@@ -258,6 +266,47 @@ export function buildProgram(deps: CliDeps): Command {
       const client = requireClient(deps);
       await runDelete(client, id, { yes: opts.yes, confirm: deps.confirm });
       console.log(`Deleted campaign ${id}`);
+    }));
+
+  const db = program.command('db').description('Query the Youmeng product database (read-only)');
+
+  db
+    .command('setup')
+    .description('Save the EdgeSpark API key for database queries')
+    .action(() => handleAction(async () => {
+      await runDbSetup({
+        promptHidden: deps.promptHidden,
+        configFilePath: deps.configFilePath,
+      });
+      console.log('API key saved to ~/.edm-cli/config.json');
+    }));
+
+  db
+    .command('query')
+    .description('Run a read-only SQL query against the Youmeng database')
+    .requiredOption('--sql <sql>', 'SQL query (must be SELECT or WITH)')
+    .option('--emails-only', 'output only the email column as a comma-separated list')
+    .action((opts, command: Command) => handleAction(async () => {
+      const result = await runQuery(opts.sql, deps.fetchImpl, deps.configFilePath);
+      if (opts.emailsOnly) {
+        const emails = result.rows
+          .map((r) => r.email as string | undefined)
+          .filter(Boolean);
+        console.log(emails.join(','));
+        return;
+      }
+      if (isJson(command)) {
+        console.log(JSON.stringify(result, null, 2));
+      } else {
+        console.log(`${result.count} rows returned`);
+        if (result.rows.length > 0) {
+          const cols = Object.keys(result.rows[0]);
+          console.log(cols.join('\t'));
+          for (const row of result.rows) {
+            console.log(cols.map((c) => String(row[c] ?? '')).join('\t'));
+          }
+        }
+      }
     }));
 
   return program;
