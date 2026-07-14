@@ -1,11 +1,12 @@
 import { Command } from 'commander';
 import { createApiClient, ApiError, type ApiClient } from './http-client.js';
-import { loadSession } from './session.js';
+import { loadSession, saveSession } from './session.js';
 import { printOutput } from './output.js';
 import { runLogin, runLogout, runWhoami } from './commands/auth.js';
 import { runCreate, runUpdate, runSetHtml, runSetText, runSetRecipients } from './commands/campaign-write.js';
 import { runList, runGet, runLogs, runPreviewRecipients } from './commands/campaign-read.js';
 import { runSend, runResendFailed, runDelete, AbortedError } from './commands/campaign-send.js';
+import { runUpload, runListAssets, runDeleteAsset } from './commands/asset.js';
 import { runDbSetup, runQuery } from './commands/db.js';
 import { DbError } from './db-client.js';
 import { promptText, promptHidden, confirm } from './prompt.js';
@@ -29,7 +30,12 @@ function requireClient(deps: CliDeps): ApiClient {
   if (!session) {
     throw new Error('Not logged in — run "edm-cli login" first.');
   }
-  return createApiClient(deps.baseUrl, session.cookie, deps.fetchImpl);
+  return createApiClient(deps.baseUrl, session.cookie, {
+    fetchImpl: deps.fetchImpl,
+    onCookieRefresh: (newCookie) => {
+      saveSession({ ...session, cookie: newCookie, savedAt: Date.now() }, deps.sessionFilePath);
+    },
+  });
 }
 
 function isJson(command: Command): boolean {
@@ -266,6 +272,41 @@ export function buildProgram(deps: CliDeps): Command {
       const client = requireClient(deps);
       await runDelete(client, id, { yes: opts.yes, confirm: deps.confirm });
       console.log(`Deleted campaign ${id}`);
+    }));
+
+  const asset = program.command('asset').description('Manage images for email campaigns');
+
+  asset
+    .command('upload')
+    .description('Upload an image and get its public URL')
+    .requiredOption('--file <path>', 'path to the image (png, jpg, gif, webp, svg)')
+    .action((opts, command: Command) => handleAction(async () => {
+      const client = requireClient(deps);
+      const result = await runUpload(client, opts.file, deps.baseUrl, deps.fetchImpl);
+      printOutput(isJson(command), result, [result.url]);
+    }));
+
+  asset
+    .command('list')
+    .description('List uploaded images')
+    .action((_opts, command: Command) => handleAction(async () => {
+      const client = requireClient(deps);
+      const files = await runListAssets(client);
+      printOutput(isJson(command), files, files.map((f) => `${f.path}  ${f.size} bytes  ${f.url}`));
+    }));
+
+  asset
+    .command('delete <key>')
+    .description('Delete an uploaded image')
+    .option('--yes', 'skip the confirmation prompt')
+    .action((key, opts) => handleAction(async () => {
+      const client = requireClient(deps);
+      if (!opts.yes) {
+        const ok = await deps.confirm(`Delete image "${key}" permanently?`);
+        if (!ok) throw new AbortedError('Aborted.');
+      }
+      await runDeleteAsset(client, key);
+      console.log(`Deleted ${key}`);
     }));
 
   const db = program.command('db').description('Query the Youmeng product database (read-only)');

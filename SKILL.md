@@ -37,6 +37,10 @@ edm-cli login
 edm-cli logout
 edm-cli whoami [--json]
 
+edm-cli asset upload --file <path> [--json]     # upload image, returns public URL
+edm-cli asset list [--json]                     # list uploaded images
+edm-cli asset delete <key> [--yes]              # delete an image
+
 edm-cli db setup                               # one-time, human runs this
 edm-cli db query --sql <sql> [--emails-only] [--json]
   # Read-only queries against the Youmeng product database (D1/SQLite).
@@ -109,6 +113,8 @@ edm-cli campaign send <id> --yes
 
 ## `--json` output shapes
 
+- `asset upload`: `{ key: "1720000000-abc123.png", url: "https://.../api/public/img/..." }`
+- `asset list`: `[ { path, size, uploadedAt, url } ]`
 - `db query`: `{ rows: [{ col1: val, col2: val, ... }], count: N }`
 - `db query --emails-only`: plain text, comma-separated emails (ignores `--json`)
 - `whoami`: `{ email, isSuperAdmin, canSend }`

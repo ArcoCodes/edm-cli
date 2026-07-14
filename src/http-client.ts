@@ -11,10 +11,19 @@ export interface ApiClient {
   request<T>(path: string, init?: RequestInit): Promise<T>;
 }
 
-export function createApiClient(baseUrl: string, cookie: string, fetchImpl: typeof fetch = fetch): ApiClient {
+export interface ApiClientOptions {
+  fetchImpl?: typeof fetch;
+  onCookieRefresh?: (newCookie: string) => void;
+}
+
+export function createApiClient(baseUrl: string, initialCookie: string, optsOrFetch?: ApiClientOptions | typeof fetch): ApiClient {
+  const opts: ApiClientOptions = typeof optsOrFetch === 'function' ? { fetchImpl: optsOrFetch } : (optsOrFetch ?? {});
+  const fetchFn = opts.fetchImpl ?? fetch;
+  let cookie = initialCookie;
+
   return {
     async request<T>(path: string, init: RequestInit = {}): Promise<T> {
-      const res = await fetchImpl(`${baseUrl}${path}`, {
+      const res = await fetchFn(`${baseUrl}${path}`, {
         ...init,
         headers: {
           'Content-Type': 'application/json',
@@ -22,6 +31,13 @@ export function createApiClient(baseUrl: string, cookie: string, fetchImpl: type
           ...(init.headers as Record<string, string> | undefined),
         },
       });
+
+      const setCookies = res.headers.getSetCookie?.() ?? [];
+      if (setCookies.length > 0) {
+        cookie = setCookies.map((c) => c.split(';')[0]).join('; ');
+        opts.onCookieRefresh?.(cookie);
+      }
+
       const body: unknown = await res.json().catch(() => ({}));
       if (!res.ok) {
         const record = body as Record<string, unknown>;
