@@ -5,7 +5,7 @@ import { buildProgram, defaultDeps } from './cli.js';
 test('buildProgram registers the expected top-level and campaign subcommands', () => {
   const program = buildProgram(defaultDeps('https://example.test'));
   const topNames = program.commands.map((c) => c.name()).sort();
-  assert.deepEqual(topNames, ['asset', 'campaign', 'db', 'login', 'logout', 'whoami']);
+  assert.deepEqual(topNames, ['asset', 'campaign', 'db', 'login', 'logout', 'sender', 'whoami']);
 
   const campaign = program.commands.find((c) => c.name() === 'campaign');
   assert.ok(campaign);

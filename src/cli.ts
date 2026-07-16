@@ -7,6 +7,7 @@ import { runCreate, runUpdate, runSetHtml, runSetText, runSetRecipients } from '
 import { runList, runGet, runLogs, runPreviewRecipients } from './commands/campaign-read.js';
 import { runSend, runResendFailed, runDelete, AbortedError } from './commands/campaign-send.js';
 import { runUpload, runListAssets, runDeleteAsset } from './commands/asset.js';
+import { runSenderShow, runSenderSet, runSenderClear } from './commands/sender.js';
 import { runDbSetup, runQuery } from './commands/db.js';
 import { DbError } from './db-client.js';
 import { promptText, promptHidden, confirm } from './prompt.js';
@@ -104,6 +105,9 @@ export function buildProgram(deps: CliDeps): Command {
         `email: ${me.email}`,
         `isSuperAdmin: ${me.isSuperAdmin}`,
         `canSend: ${me.canSend}`,
+        `senderEmail: ${me.senderEmail ?? '(default)'}`,
+        `senderName: ${me.senderName ?? '(default)'}`,
+        `resendApiKey: ${me.resendApiKey ?? '(default)'}`,
       ]);
     }));
 
@@ -307,6 +311,57 @@ export function buildProgram(deps: CliDeps): Command {
       }
       await runDeleteAsset(client, key);
       console.log(`Deleted ${key}`);
+    }));
+
+  const sender = program.command('sender').description('Manage personal sender identity');
+
+  sender
+    .command('show')
+    .description('Show current sender settings')
+    .action((_opts, command: Command) => handleAction(async () => {
+      const client = requireClient(deps);
+      const settings = await runSenderShow(client);
+      printOutput(isJson(command), settings, [
+        `senderEmail: ${settings.senderEmail ?? '(not set — using default)'}`,
+        `senderName: ${settings.senderName ?? '(not set — using default)'}`,
+        `resendApiKey: ${settings.resendApiKey ?? '(not set — using default)'}`,
+      ]);
+    }));
+
+  sender
+    .command('set')
+    .description('Update sender email, name, and/or Resend API key')
+    .option('--email <email>', 'sender email address')
+    .option('--name <name>', 'sender display name')
+    .option('--key', 'set Resend API key (prompted securely)')
+    .action((opts, command: Command) => handleAction(async () => {
+      if (!opts.email && !opts.name && !opts.key) {
+        console.error('Specify at least one of --email, --name, or --key');
+        process.exitCode = 1;
+        return;
+      }
+      const client = requireClient(deps);
+      const result = await runSenderSet(client, {
+        senderEmail: opts.email,
+        senderName: opts.name,
+        setKey: opts.key,
+        promptHidden: deps.promptHidden,
+      });
+      printOutput(isJson(command), result, [
+        'Sender settings updated.',
+        `senderEmail: ${result.senderEmail ?? '(not set)'}`,
+        `senderName: ${result.senderName ?? '(not set)'}`,
+        `resendApiKey: ${result.resendApiKey ?? '(not set)'}`,
+      ]);
+    }));
+
+  sender
+    .command('clear')
+    .description('Reset sender settings to use the team default')
+    .action((_opts, command: Command) => handleAction(async () => {
+      const client = requireClient(deps);
+      const result = await runSenderClear(client);
+      printOutput(isJson(command), result, ['Sender settings cleared — using team default.']);
     }));
 
   const db = program.command('db').description('Query the Youmeng product database (read-only)');

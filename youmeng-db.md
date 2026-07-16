@@ -1,4 +1,4 @@
-# Youmeng (Renoise) 数据库参考
+# Youmeng (Renoise) 数据库说明与访问参考
 
 ## 连接方式
 
@@ -30,7 +30,7 @@ curl -s -X POST 'https://api.edgespark.dev/api/v1/project/database/sql/execute' 
 }
 ```
 
-数据在 `data.results[0].rows`。EDM worker 的 `youmeng-client.ts` 也通过同一个 API 查友盟数据库。
+数据在 `data.results[0].rows`。EDM worker 的 `youmeng-client.ts` 也通过同一个 API 查youmeng数据库。
 
 ---
 
@@ -403,6 +403,74 @@ HAVING asset_count >= CASE COALESCE(s.plan_key, 'none')
   WHEN 'basic' THEN 80 ELSE 50 END
 ORDER BY asset_count DESC
 ```
+
+---
+
+## 可查询的用户属性（筛选维度）
+
+以下是数据库能支持的用户筛选维度，**不含**地理位置、语言、时区、设备、浏览器等信息：
+
+| 维度 | 来源表 | 可用字段/指标 |
+|------|--------|--------------|
+| 注册信息 | es_system__auth_user | name, email, created_at, last_login_at, banned |
+| 登录方式 | es_system__auth_account | provider_id (credential / google 等) |
+| 订阅等级 | subscriptions | plan_key (lite/basic/standard/advance), status (active/canceled/past_due) |
+| 付费金额 | payments | amount, currency, credits, status, 可聚合总消费 |
+| Credits 余额 | user_credits | balance |
+| Credits 流水 | credit_transactions | type (topup/consume), amount, 可聚合消费总量 |
+| 生成任务 | tasks | type (video/image), model, status, created_at, 可聚合任务数 |
+| 素材上传 | materials | type (image/video), size, 可聚合上传数 |
+| Face Pass | user_assets | 资产数量, status, enabled |
+| Canvas 项目 | canvas_projects | 项目数 |
+| 模板解锁 | template_unlocks | 解锁的模板, credit_spent |
+| LLM 调用 | llm_daily_usage | model, requests, token 用量, cost_credit |
+| API Key | api_keys | 是否创建过 API Key |
+| 兑换码 | redemption_records + redemption_codes | 兑换记录, source_key |
+
+### 通过 payments.metadata 可间接查询的属性（仅限付过款的用户）
+
+`payments.metadata` 是 JSON 字段，前端 checkout 时写入了丰富的归因和环境信息，可用 `json_extract()` 提取：
+
+| 字段 | 说明 | 示例值 |
+|------|------|--------|
+| `attr_locale` | 浏览器语言/地区 | `ja`, `en-US`, `zh-CN`, `ko-KR` |
+| `attr_timezone` | 浏览器时区 | `Asia/Tokyo`, `America/New_York` |
+| `attr_device_type` | 设备类型 | `desktop`, `mobile` |
+| `attr_is_mobile_ua` | 是否手机 UA | `true`, `false` |
+| `attr_utm_source` | UTM 来源 | `ig`, `google` |
+| `attr_utm_medium` | UTM 媒介 | `social`, `meta`, `google` |
+| `attr_utm_campaign` | UTM 活动 | campaign ID |
+| `attr_utm_content` | UTM 内容 | `link_in_bio` |
+| `attr_landing_path` | 着陆页路径 | `/`, `/onboarding` |
+| `attr_path` | Checkout 页面路径 | `/videos?modal=subscribe` |
+| `attr_referrer` | 来源页 URL | `https://www.google.com/` |
+| `attr_channel` | 渠道 | - |
+| `attr_fbclid` | Facebook Click ID | - |
+| `attr_gclid` | Google Click ID | - |
+
+示例：查日本付费用户
+
+```sql
+SELECT DISTINCT u.email, u.name
+FROM es_system__auth_user u
+INNER JOIN payments p ON p.user_id = u.id
+WHERE p.status = 'succeeded'
+  AND (json_extract(p.metadata, '$.attr_locale') LIKE 'ja%'
+       OR json_extract(p.metadata, '$.attr_timezone') = 'Asia/Tokyo')
+  AND u.banned = 0
+```
+
+**限制**：这些字段只在付费时采集，未付费的用户没有此信息。
+
+### 不可查询的属性（未付费用户）
+
+对于未付费用户，数据库中**没有**以下字段：
+
+- 国家/地区、IP 地址
+- 语言/Locale
+- 时区
+- 设备类型、操作系统、浏览器
+- 推荐来源/UTM 参数
 
 ---
 

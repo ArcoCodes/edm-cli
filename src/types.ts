@@ -41,6 +41,9 @@ export interface Me {
   email: string;
   isSuperAdmin: boolean;
   canSend: boolean;
+  senderEmail: string | null;
+  senderName: string | null;
+  resendApiKey: string | null;
 }
 
 export interface SendChunkResult {
